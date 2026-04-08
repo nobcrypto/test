@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iran Geopolitical Dashboard — Trading Intelligence</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="bg-gray-950 text-gray-100 font-mono min-h-screen">
+
+<!-- ===== TOP BAR ===== -->
+<header class="border-b border-gray-800 px-6 py-3 flex items-center justify-between sticky top-0 bg-gray-950 z-50">
+  <div class="flex items-center gap-3">
+    <span class="text-orange-400 text-lg font-bold tracking-widest">IRAN WATCH</span>
+    <span class="text-gray-500 text-xs">Trading Intelligence Dashboard</span>
+  </div>
+  <div class="flex items-center gap-4">
+    <span id="last-updated" class="text-gray-500 text-xs">Loading...</span>
+    <span id="risk-badge" class="px-3 py-1 rounded text-xs font-bold risk-badge">---</span>
+    <button onclick="manualRefresh()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded border border-gray-700">
+      Refresh
+    </button>
+  </div>
+</header>
+
+<!-- ===== MAIN GRID ===== -->
+<main class="max-w-screen-2xl mx-auto px-4 py-4 grid grid-cols-12 gap-4">
+
+  <!-- ===== LEFT PANEL: Summary Scores ===== -->
+  <aside class="col-span-12 lg:col-span-3 flex flex-col gap-4">
+
+    <!-- Risk Level -->
+    <div class="panel">
+      <h2 class="panel-title">Geopolitical Risk</h2>
+      <div class="flex flex-col items-center py-4 gap-2">
+        <div id="risk-level-text" class="text-4xl font-black tracking-widest">---</div>
+        <div class="w-full bg-gray-800 rounded-full h-3 mt-2">
+          <div id="risk-bar" class="h-3 rounded-full transition-all duration-700" style="width:0%"></div>
+        </div>
+        <div class="text-gray-500 text-xs mt-1">-5 (calm) → +5 (critical)</div>
+        <div id="risk-score-num" class="text-2xl font-bold mt-1">0.0</div>
+      </div>
+    </div>
+
+    <!-- Market Signals -->
+    <div class="panel">
+      <h2 class="panel-title">Market Impact Signals</h2>
+      <div class="space-y-3 py-2">
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-orange-400">Crude Oil (WTI/Brent)</span>
+            <span id="oil-score-txt" class="font-bold">—</span>
+          </div>
+          <div class="relative w-full bg-gray-800 rounded h-4">
+            <div class="absolute left-1/2 top-0 w-px h-4 bg-gray-600"></div>
+            <div id="oil-bar" class="signal-bar absolute top-0 h-4 rounded transition-all duration-700 bg-orange-500" style="left:50%;width:0%"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-yellow-400">Gold (XAU)</span>
+            <span id="gold-score-txt" class="font-bold">—</span>
+          </div>
+          <div class="relative w-full bg-gray-800 rounded h-4">
+            <div class="absolute left-1/2 top-0 w-px h-4 bg-gray-600"></div>
+            <div id="gold-bar" class="signal-bar absolute top-0 h-4 rounded transition-all duration-700 bg-yellow-400" style="left:50%;width:0%"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-blue-400">USD Index</span>
+            <span id="usd-score-txt" class="font-bold">—</span>
+          </div>
+          <div class="relative w-full bg-gray-800 rounded h-4">
+            <div class="absolute left-1/2 top-0 w-px h-4 bg-gray-600"></div>
+            <div id="usd-bar" class="signal-bar absolute top-0 h-4 rounded transition-all duration-700 bg-blue-400" style="left:50%;width:0%"></div>
+          </div>
+        </div>
+      </div>
+      <p class="text-gray-600 text-xs mt-2">+ = bullish pressure &nbsp;|&nbsp; - = bearish pressure</p>
+    </div>
+
+    <!-- Top Active Signals -->
+    <div class="panel">
+      <h2 class="panel-title">Active Signal Themes</h2>
+      <ul id="signal-list" class="space-y-1 py-2 text-xs"></ul>
+    </div>
+
+    <!-- Article Count by Source -->
+    <div class="panel">
+      <h2 class="panel-title">Articles by Source</h2>
+      <canvas id="source-chart" height="180"></canvas>
+    </div>
+
+  </aside>
+
+  <!-- ===== CENTER + RIGHT: Timeline ===== -->
+  <section class="col-span-12 lg:col-span-9 flex flex-col gap-4">
+
+    <!-- Filter bar -->
+    <div class="panel py-3 flex flex-wrap gap-3 items-center">
+      <span class="text-xs text-gray-400">Filter:</span>
+      <select id="filter-bias" onchange="applyFilters()" class="filter-select">
+        <option value="all">All Sources</option>
+        <option value="neutral">Wire (Reuters/AP)</option>
+        <option value="me_focus">Middle East Focus</option>
+        <option value="il_focus">Israel Focus</option>
+        <option value="energy">Energy Media</option>
+        <option value="market">Market Media</option>
+        <option value="ir_state">Iranian State</option>
+      </select>
+      <select id="filter-signal" onchange="applyFilters()" class="filter-select">
+        <option value="">All Signals</option>
+        <option value="Military Escalation">Military Escalation</option>
+        <option value="Hormuz Closure Risk">Hormuz Closure Risk</option>
+        <option value="IRGC/Missile Activity">IRGC/Missile Activity</option>
+        <option value="Sanctions Pressure">Sanctions Pressure</option>
+        <option value="Nuclear Program">Nuclear Program</option>
+        <option value="Diplomatic Progress">Diplomatic Progress</option>
+        <option value="Sanctions Relief">Sanctions Relief</option>
+        <option value="Red Sea/Houthi Threat">Red Sea/Houthi Threat</option>
+        <option value="OPEC Supply Action">OPEC Supply Action</option>
+      </select>
+      <input id="search-box" type="text" placeholder="Keyword search..." oninput="applyFilters()"
+             class="filter-select w-48" />
+      <span id="article-count-label" class="text-gray-500 text-xs ml-auto"></span>
+    </div>
+
+    <!-- Timeline -->
+    <div id="timeline" class="flex flex-col gap-3 overflow-y-auto" style="max-height:calc(100vh - 200px)">
+      <div class="text-center text-gray-600 py-10 text-sm">Fetching feeds...</div>
+    </div>
+
+  </section>
+</main>
+
+<!-- ===== LEGEND FOOTER ===== -->
+<footer class="text-center text-gray-700 text-xs py-4 border-t border-gray-900 mt-4">
+  Data: Reuters · AP · Al Jazeera · Middle East Eye · Haaretz · Times of Israel · OilPrice · ForexLive · PressTV &nbsp;|&nbsp;
+  Auto-refresh every 5 min &nbsp;|&nbsp; Scores are algorithmic estimates, not financial advice.
+</footer>
+
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>

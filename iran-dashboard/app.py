@@ -7,6 +7,7 @@ from flask import Flask, jsonify, render_template, request
 
 from feeds import fetch_all_feeds
 from analyzer import score_article, aggregate
+from demo_data import DEMO_ARTICLES
 
 app = Flask(__name__)
 
@@ -24,6 +25,10 @@ _lock = threading.Lock()
 
 def _refresh():
     articles = fetch_all_feeds()
+    # Fall back to demo data when no live feeds are reachable
+    if not articles:
+        print("[app] No live articles fetched — using demo data")
+        articles = list(DEMO_ARTICLES)
     scored   = [score_article(a) for a in articles]
     summary  = aggregate(scored)
     with _lock:

@@ -1,7 +1,7 @@
-# feeds.py — RSS source definitions and fetcher
+# feeds.py — RSS source definitions and fetcher (stdlib XML, no feedparser)
 
-import feedparser
 import requests
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from dateutil import parser as dateparser
 
@@ -44,14 +44,54 @@ def _is_iran_related(title: str, summary: str) -> bool:
     return any(kw in text for kw in IRAN_KEYWORDS)
 
 
-def _parse_date(entry) -> datetime:
-    for attr in ("published", "updated"):
-        raw = getattr(entry, attr, None)
-        if raw:
-            try:
-                return dateparser.parse(raw).astimezone(timezone.utc)
-            except Exception:
-                pass
+def _text(el, tag: str, ns: str = "") -> str:
+    """Extract text from a child element, handling optional namespaces."""
+    child = el.find(f"{ns}{tag}")
+    if child is not None and child.text:
+        return child.text.strip()
+    return ""
+
+
+def _parse_rss_items(xml_text: str, max_items: int) -> list[dict]:
+    """Parse RSS 2.0 or Atom feed XML into a list of raw entry dicts."""
+    entries = []
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return entries
+
+    # Detect Atom vs RSS
+    ns_atom = "{http://www.w3.org/2005/Atom}"
+    is_atom = root.tag.startswith(ns_atom) or root.tag == "feed"
+
+    if is_atom:
+        items = root.findall(f"{ns_atom}entry") or root.findall("entry")
+        for item in items[:max_items]:
+            title   = _text(item, "title",   ns_atom) or _text(item, "title")
+            summary = _text(item, "summary", ns_atom) or _text(item, "content", ns_atom) or _text(item, "summary")
+            link_el = item.find(f"{ns_atom}link") or item.find("link")
+            link    = (link_el.get("href", "") if link_el is not None else "")
+            pub     = _text(item, "published", ns_atom) or _text(item, "updated", ns_atom)
+            entries.append({"title": title, "summary": summary, "link": link, "published": pub})
+    else:
+        # RSS 2.0
+        channel = root.find("channel") or root
+        for item in channel.findall("item")[:max_items]:
+            title   = _text(item, "title")
+            summary = _text(item, "description") or _text(item, "summary")
+            link    = _text(item, "link")
+            pub     = _text(item, "pubDate") or _text(item, "date")
+            entries.append({"title": title, "summary": summary, "link": link, "published": pub})
+
+    return entries
+
+
+def _parse_date(raw: str) -> datetime:
+    if raw:
+        try:
+            return dateparser.parse(raw).astimezone(timezone.utc)
+        except Exception:
+            pass
     return datetime.now(timezone.utc)
 
 
@@ -62,21 +102,20 @@ def _parse_date(entry) -> datetime:
 def fetch_all_feeds(max_per_source: int = 30) -> list[dict]:
     """Fetch and filter Iran-related articles from all sources."""
     articles = []
-    headers = {"User-Agent": "IranDashboard/1.0 (trading research tool)"}
+    headers  = {"User-Agent": "IranDashboard/1.0 (trading research tool)"}
 
     for src in SOURCES:
         try:
             resp = requests.get(src["url"], headers=headers, timeout=10)
-            feed = feedparser.parse(resp.text)
-        except Exception:
-            try:
-                feed = feedparser.parse(src["url"])
-            except Exception:
-                continue
+            resp.raise_for_status()
+            raw_entries = _parse_rss_items(resp.text, max_per_source)
+        except Exception as exc:
+            print(f"[feeds] {src['name']}: {exc}")
+            continue
 
-        for entry in feed.entries[:max_per_source]:
+        for entry in raw_entries:
             title   = entry.get("title", "")
-            summary = entry.get("summary", entry.get("description", ""))
+            summary = entry.get("summary", "")
             link    = entry.get("link", "")
 
             if not _is_iran_related(title, summary):
@@ -88,9 +127,8 @@ def fetch_all_feeds(max_per_source: int = 30) -> list[dict]:
                 "title":     title,
                 "summary":   summary[:400],
                 "link":      link,
-                "published": _parse_date(entry).isoformat(),
+                "published": _parse_date(entry.get("published", "")).isoformat(),
             })
 
-    # Sort newest first
     articles.sort(key=lambda a: a["published"], reverse=True)
     return articles

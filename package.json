@@ -1,0 +1,13 @@
+{
+  "name": "go2senkyo-kawashima-scraper",
+  "version": "1.0.0",
+  "description": "go2senkyo.com 川島候補者データスクレイパー",
+  "main": "scrape_kawashima.js",
+  "scripts": {
+    "scrape": "node scrape_kawashima.js",
+    "test:mock": "node test_mock.js"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}
